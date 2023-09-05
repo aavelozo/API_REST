@@ -1,0 +1,73 @@
+* = Obrigatory
+
+*TO INSTALL NODE: 
+run cmd in root project folder:
+npm install
+
+TO CONFIGURE YOUR DATABASE
+goto src/database/config/config.[js/json]
+check/change your database configuration
+
+*RUN MIGRATIONS:
+run cmds (in src/server/database folder):
+cd src/database
+npx sequelize-cli db:create (if your database not exists)(oracle dont support it, create manually)
+npx sequelize-cli db:migrate
+npx sequelize-cli db:seed:all
+
+*TO UP SERVER
+run cmd in root project folder
+npm start
+
+
+
+
+TO AUTO-GENERATE MODELS WITH SEQUELIZE AND PRE-EXISTS DATABASE TABLES:
+cd node_modules\.bin & sequelize-auto -h localhost -d ['YOUR SCHEMA NAME'] -u root -x masterkey -p 3306  --dialect mysql -o ../../server/models
+
+
+ORACLE ONLY:
+alter node_modules\sequelize\lib\dialects\abstract\query-generator.js
+alter line 556 to suppress unsuported on update of oracle
+change 
+    if (options.onUpdate)
+to
+    if (options.onUpdate && !["oracle"].includes(this.dialect)) {
+
+to delete all tables of oracle database, run this code in your created schema
+drop all_tables ATTENTION TO OWER NAME CORRECT
+set serveroutput on size unl;
+DECLARE
+    cmd varchar2(4000);
+begin
+    for li in (
+        select
+            *
+        from
+            all_constraints
+        where
+            owner = ['YOUR SCHEMA NAME']
+            and table_name not like 'BIN%'
+            and constraint_type = 'R'
+    ) loop 
+        cmd:= 'alter table "'||li.owner||'"."'||li.table_name||'" drop constraint "'||li.constraint_name ||'"'; 
+        dbms_output.put_line(cmd);
+        EXECUTE IMMEDIATE cmd;
+     end loop;
+              
+     for li in (
+        select
+            *
+        from
+            all_tables
+        where
+            owner = ['YOUR SCHEMA NAME']
+            and table_name not like 'BIN%'
+    ) loop 
+        cmd:= 'drop table "'||li.owner||'"."'||li.table_name||'"'; 
+        dbms_output.put_line(cmd);
+        EXECUTE IMMEDIATE cmd;
+     end loop;     
+end;
+
+
