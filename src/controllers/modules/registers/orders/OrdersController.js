@@ -93,6 +93,7 @@ class OrdersController {
      */
     static async create(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};            
 
             //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
@@ -156,6 +157,7 @@ class OrdersController {
      */
     static async update(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.id) throw new Error("missing data");
 
@@ -287,6 +289,7 @@ class OrdersController {
      */
     static async delete(req,res,next) {
         try {
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.id) throw new Error("missing data");
 
@@ -314,6 +317,7 @@ class OrdersController {
      */
     static async finalize(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.id) throw new Error("missing data");
 

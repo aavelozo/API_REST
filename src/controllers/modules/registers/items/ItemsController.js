@@ -22,6 +22,7 @@ class ItemsController {
      */
     static async create(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.gtin || !body.name) throw new Error("missing data");
 
@@ -64,6 +65,7 @@ class ItemsController {
      */
     static async update(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.id) throw new Error("missing data");
 
@@ -98,6 +100,7 @@ class ItemsController {
      */
     static async delete(req,res,next) {
         try {
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
             let body = req.body || {};
             if (!body.id) throw new Error("missing data");
 
@@ -124,6 +127,7 @@ class ItemsController {
      */
     static async get(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'GET') throw new Error("method not allowed");
             let body = req.body || {};
             let where = {};
             if (body.id) where.ID = body.id;

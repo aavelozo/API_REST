@@ -21,6 +21,7 @@ class OrdersXItemsController {
      */
     static async create(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};            
             if (!body?.idorder || !body.iditem) throw new Error("missing data");
             let order = await Orders.getModel().findByPk(body.idorder);
@@ -64,6 +65,7 @@ class OrdersXItemsController {
      */
     static async update(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
             let body = req.body || {};            
             if (!body?.idorder || !body.iditem) throw new Error("missing data");
             let order = await Orders.getModel().findByPk(body.idorder);
@@ -106,6 +108,7 @@ class OrdersXItemsController {
      */
     static async delete(req,res,next) {
         try {
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
             let body = req.body || {};            
             if (!body?.idorder || !body.iditem) throw new Error("missing data");
             let order = await Orders.getModel().findByPk(body.idorder);
@@ -142,6 +145,7 @@ class OrdersXItemsController {
      */
     static async getItemsForProduction(req,res,next) {
         try {
+            if (req.method.trim().toUpperCase() != 'GET') throw new Error("method not allowed");
             let result = await OrdersXItems.getModel().findAll({
                 raw:true,
                 attributes:['IDORDER','IDITEM','AMOUNT','STATUS'],
