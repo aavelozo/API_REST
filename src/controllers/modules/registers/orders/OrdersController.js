@@ -93,58 +93,60 @@ class OrdersController {
      */
     static async create(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};            
+            if (req.method.trim().toUpperCase() != 'POST') res.sendResponse(405,false,'method not allowed')
+            else {
+                let body = req.body || {};            
 
-            //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
-                //create order
-                let order = await Orders.getModel().create({},{transaction:t,req:req});
+                //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                    //create order
+                    let order = await Orders.getModel().create({},{transaction:t,req:req});
 
-                //anonymous clients
-                if (body?.qtanonymousclients) await OrdersXClients.getModel().create({
-                    IDORDER: order.ID,
-                    IDCLIENT: Clients.ANONYMOUS,
-                    QTCLIENTS: body.qtanonymousclients
-                },{
-                    transaction:t,
-                    req:req
+                    //anonymous clients
+                    if (body?.qtanonymousclients) await OrdersXClients.getModel().create({
+                        IDORDER: order.ID,
+                        IDCLIENT: Clients.ANONYMOUS,
+                        QTCLIENTS: body.qtanonymousclients
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+
+                    //identified clients
+                    if (body?.clients) { 
+                        for(let key in body.clients) {                        
+                            await OrdersXClients.getModel().create({
+                                IDORDER: order.ID,
+                                IDITEM: body.clients[key].id,
+                                ISPAYER: body.clients[key]?.ispayer || false
+                            },{
+                                transaction:t,
+                                req:req
+                            });
+                        }
+                    }
+
+                    //items
+                    if (body?.items) { 
+                        for(let key in body.items) {                        
+                            await OrdersXItems.getModel().create({
+                                IDORDER: order.ID,
+                                IDITEM: body.items[key].id,
+                                AMOUNT: body.items[key]?.amount || 0,
+                                UNVALUE: body.items[key]?.unvalue || 0,
+                            },{
+                                transaction:t,
+                                req:req
+                            });
+                        }
+                    }
+
+                    return res.sendResponse(200,true,'order successfull created',order.dataValues);
                 });
-
-                //identified clients
-                if (body?.clients) { 
-                    for(let key in body.clients) {                        
-                        await OrdersXClients.getModel().create({
-                            IDORDER: order.ID,
-                            IDITEM: body.clients[key].id,
-                            ISPAYER: body.clients[key]?.ispayer || false
-                        },{
-                            transaction:t,
-                            req:req
-                        });
-                    }
-                }
-
-                //items
-                if (body?.items) { 
-                    for(let key in body.items) {                        
-                        await OrdersXItems.getModel().create({
-                            IDORDER: order.ID,
-                            IDITEM: body.items[key].id,
-                            AMOUNT: body.items[key]?.amount || 0,
-                            UNVALUE: body.items[key]?.unvalue || 0,
-                        },{
-                            transaction:t,
-                            req:req
-                        });
-                    }
-                }
-
-                return res.sendResponse(200,true,'order successfull created',order.dataValues);
-            });
+            }
             
         } catch (e) {
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -157,126 +159,127 @@ class OrdersController {
      */
     static async update(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','PATCH','PUT'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if order exists
-            let order = await Orders.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!order) throw new Error('order not found')
-            else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');
+                //check if order exists
+                let order = await Orders.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!order) throw new Error('order not found')
+                else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');
 
-            //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
-               
+                //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
                 
-                //anonymous clients
-                if (body?.qtanonymousclients) {
-                    let orderXClient = await OrdersXClients.getModel().findOne({
-                        where : {
-                            IDORDER: order.ID,
-                            IDCLIENT: Clients.ANONYMOUS
-                        },
-                        transaction:t,
-                    });
-                    if (!orderXClient) {
-                        await OrdersXClients.getModel().create({
-                            IDORDER: order.ID,
-                            IDCLIENT: Clients.ANONYMOUS,
-                            QTCLIENTS : body?.qtanonymousclients
-                        },{
-                            transaction:t,
-                            req:req
-                        });
-                     } else {
-                        orderXClient.QTCLIENTS = body?.qtanonymousclients;
-                        await orderXClient.save({
-                            transaction:t,
-                            req:req
-                        });
-                    }
-                };  
-                
-                //identified clients
-                if (body?.clients) { 
-                    for(let key in body.clients) {  
+                    
+                    //anonymous clients
+                    if (body?.qtanonymousclients) {
                         let orderXClient = await OrdersXClients.getModel().findOne({
-                            where:{
+                            where : {
                                 IDORDER: order.ID,
-                                IDCLIENT: body.clients[key].id,
+                                IDCLIENT: Clients.ANONYMOUS
                             },
                             transaction:t,
-                        });                        
+                        });
                         if (!orderXClient) {
                             await OrdersXClients.getModel().create({
                                 IDORDER: order.ID,
-                                IDCLIENT: body.clients[key].id,
-                                ISPAYER: body.clients[key]?.ispayer || false
+                                IDCLIENT: Clients.ANONYMOUS,
+                                QTCLIENTS : body?.qtanonymousclients
                             },{
                                 transaction:t,
                                 req:req
                             });
                         } else {
-                            orderXClient.ISPAYER = body.clients[key]?.ispayer || false;
+                            orderXClient.QTCLIENTS = body?.qtanonymousclients;
                             await orderXClient.save({
                                 transaction:t,
                                 req:req
                             });
                         }
-                    }
-                }
-
-                //identified clients
-                if (body?.items) { 
-                    for(let key in body.items) {  
-                        let orderXItem = await OrdersXItems.getModel().findOne({
-                            attributes:['IDORDER','IDITEM','AMOUNT','UNVALUE','STATUS'],
-                            where:{
-                                IDORDER: order.ID,
-                                IDITEM: body.items[key].id,
-                            },
-                            transaction:t,
-                        });                        
-                        if (!orderXItem) {
-                            await OrdersXItems.getModel().create({
-                                IDORDER: order.ID,
-                                IDITEM: body.items[key].id,
-                                AMOUNT: body.items[key]?.amount || 0,
-                                UNVALUE: body.items[key]?.unvalue || 0,
-                            },{
+                    };  
+                    
+                    //identified clients
+                    if (body?.clients) { 
+                        for(let key in body.clients) {  
+                            let orderXClient = await OrdersXClients.getModel().findOne({
+                                where:{
+                                    IDORDER: order.ID,
+                                    IDCLIENT: body.clients[key].id,
+                                },
                                 transaction:t,
-                                req:req
-                            });
-                        } else {
-                            orderXItem.AMOUNT = body.items[key]?.amount || 0;
-                            orderXItem.UNVALUE = body.items[key]?.unvalue || 0;
-                            orderXItem.STATUS = 'P';
-                            await orderXItem.save({
-                                transaction:t,
-                                req:req
-                            });
+                            });                        
+                            if (!orderXClient) {
+                                await OrdersXClients.getModel().create({
+                                    IDORDER: order.ID,
+                                    IDCLIENT: body.clients[key].id,
+                                    ISPAYER: body.clients[key]?.ispayer || false
+                                },{
+                                    transaction:t,
+                                    req:req
+                                });
+                            } else {
+                                orderXClient.ISPAYER = body.clients[key]?.ispayer || false;
+                                await orderXClient.save({
+                                    transaction:t,
+                                    req:req
+                                });
+                            }
                         }
                     }
-                }
 
-
-                if (body?.status) {
-                    order.STATUS = body.status;
-                    if (order.STATUS == 'F') {
-                        let canFinalize = await OrdersController.checkCanFinalizeOrder(order,t);
-                        if (canFinalize !== true) 
-                            throw new Error(canFinalize.join(","));                        
+                    //identified clients
+                    if (body?.items) { 
+                        for(let key in body.items) {  
+                            let orderXItem = await OrdersXItems.getModel().findOne({
+                                attributes:['IDORDER','IDITEM','AMOUNT','UNVALUE','STATUS'],
+                                where:{
+                                    IDORDER: order.ID,
+                                    IDITEM: body.items[key].id,
+                                },
+                                transaction:t,
+                            });                        
+                            if (!orderXItem) {
+                                await OrdersXItems.getModel().create({
+                                    IDORDER: order.ID,
+                                    IDITEM: body.items[key].id,
+                                    AMOUNT: body.items[key]?.amount || 0,
+                                    UNVALUE: body.items[key]?.unvalue || 0,
+                                },{
+                                    transaction:t,
+                                    req:req
+                                });
+                            } else {
+                                orderXItem.AMOUNT = body.items[key]?.amount || 0;
+                                orderXItem.UNVALUE = body.items[key]?.unvalue || 0;
+                                orderXItem.STATUS = 'P';
+                                await orderXItem.save({
+                                    transaction:t,
+                                    req:req
+                                });
+                            }
+                        }
                     }
-                }
 
-                return res.sendResponse(200,true,'order successfull updated',order.dataValues);
-            });
-            
+
+                    if (body?.status) {
+                        order.STATUS = body.status;
+                        if (order.STATUS == 'F') {
+                            let canFinalize = await OrdersController.checkCanFinalizeOrder(order,t);
+                            if (canFinalize !== true) 
+                                throw new Error(canFinalize.join(","));                        
+                        }
+                    }
+
+                    return res.sendResponse(200,true,'order successfull updated',order.dataValues);
+                });
+            }            
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -289,21 +292,23 @@ class OrdersController {
      */
     static async delete(req,res,next) {
         try {
-            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if order exists
-            let order = await Orders.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!order) throw new Error('order not found')
-            else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');
-            await order.destroy({req:req});
-            return res.sendResponse(200,true,'order successfull deleted',order.dataValues);
+                //check if order exists
+                let order = await Orders.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!order) throw new Error('order not found')
+                else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');
+                await order.destroy({req:req});
+                return res.sendResponse(200,true,'order successfull deleted',order.dataValues);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     } 
     
@@ -317,62 +322,64 @@ class OrdersController {
      */
     static async finalize(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','PATCH','PUT'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if order exists
-            let order = await Orders.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!order) throw new Error('order not found')
-            else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');            
-            let canFinalize = await OrdersController.checkCanFinalizeOrder(order,null,body?.qtpayers || null);          
-            if (canFinalize !== true) throw new Error(canFinalize.join(",")); 
-            order.STATUS = "F";
-            await order.save({req:req});
+                //check if order exists
+                let order = await Orders.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!order) throw new Error('order not found')
+                else if (order.STATUS == 'C' || order.STATUS == 'F') throw new Error('order not opened');            
+                let canFinalize = await OrdersController.checkCanFinalizeOrder(order,null,body?.qtpayers || null);          
+                if (canFinalize !== true) throw new Error(canFinalize.join(",")); 
+                order.STATUS = "F";
+                await order.save({req:req});
 
-            order = order.dataValues;
+                order = order.dataValues;
 
-            let totalValue = await OrdersXItems.getModel().findAll({
-                raw:true,
-                attributes:[
-                    Sequelize.literal(`sum(coalesce(${OrdersXItems.name.toUpperCase()}.AMOUNT,0) * coalesce(${OrdersXItems.name.toUpperCase()}.UNVALUE,0)) as total`)
-                ],
-                where:{
-                    IDORDER : order.ID
-                }
-            });
-
-            console.log(totalValue);
-            order.TOTAL = totalValue[0].total;
-
-
-            if (body?.qtpayers) {
-                order.QTCLIENTSPAYERS = body.qtpayers;
-            } else {
-                let qtClients = await OrdersXClients.getModel().findAll({
+                let totalValue = await OrdersXItems.getModel().findAll({
                     raw:true,
                     attributes:[
-                        Sequelize.literal(`count(case when IDCLIENT = ${Clients.ANONYMOUS} then null else 1 end) + sum(case when IDCLIENT = ${Clients.ANONYMOUS} then coalesce(qtclients,0) else 0 end) as qtClients`)
+                        Sequelize.literal(`sum(coalesce(${OrdersXItems.name.toUpperCase()}.AMOUNT,0) * coalesce(${OrdersXItems.name.toUpperCase()}.UNVALUE,0)) as total`)
                     ],
                     where:{
-                        IDORDER : order.ID,
-                        ISPAYER : 1
+                        IDORDER : order.ID
                     }
                 });
-                console.log(qtClients);
-                order.QTCLIENTSPAYERS = qtClients[0].qtClients;
-            }
-            
-            if (order.QTCLIENTSPAYERS > 0) {
-                order.VALUEBYCLIENT = order.TOTAL / order.QTCLIENTSPAYERS;
-            }
 
-            return res.sendResponse(200,true,'order successfull finalized',order);
+                console.log(totalValue);
+                order.TOTAL = totalValue[0].total;
+
+
+                if (body?.qtpayers) {
+                    order.QTCLIENTSPAYERS = body.qtpayers;
+                } else {
+                    let qtClients = await OrdersXClients.getModel().findAll({
+                        raw:true,
+                        attributes:[
+                            Sequelize.literal(`count(case when IDCLIENT = ${Clients.ANONYMOUS} then null else 1 end) + sum(case when IDCLIENT = ${Clients.ANONYMOUS} then coalesce(qtclients,0) else 0 end) as qtClients`)
+                        ],
+                        where:{
+                            IDORDER : order.ID,
+                            ISPAYER : 1
+                        }
+                    });
+                    console.log(qtClients);
+                    order.QTCLIENTSPAYERS = qtClients[0].qtClients;
+                }
+                
+                if (order.QTCLIENTSPAYERS > 0) {
+                    order.VALUEBYCLIENT = order.TOTAL / order.QTCLIENTSPAYERS;
+                }
+
+                return res.sendResponse(200,true,'order successfull finalized',order);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     } 
 

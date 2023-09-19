@@ -22,59 +22,61 @@ class CollaboratorsController {
      */
     static async create(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.identifierdoc || !body.name) throw new Error("missing data");
+            if (req.method.trim().toUpperCase() != 'POST') res.sendResponse(405,false,'method not allowed')
+            else {
+                let body = req.body || {};
+                if (!body.identifierdoc || !body.name) throw new Error("missing data");
 
-            //check if collaborator exists
-            let collaborator = await Collaborators.getModel().findOne({
-                raw:true,
-                include:[{
-                    model: People.getModel(),
-                    required:true,
-                    attributes:[],
-                    on:{
+                //check if collaborator exists
+                let collaborator = await Collaborators.getModel().findOne({
+                    raw:true,
+                    include:[{
+                        model: People.getModel(),
+                        required:true,
+                        attributes:[],
+                        on:{
+                            IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
+                            IDENTIFIERDOC : body.identifierdoc,
+                            [Sequelize.Op.and]:[
+                                Sequelize.where(Sequelize.col(`${Collaborators.name.toUpperCase()}.IDPEOPLE`),'=',Sequelize.col(`${People.name.toUpperCase()}.ID`)),                            
+                            ]
+                        }
+                    }]
+                });
+                if (collaborator) throw new Error('collaborator already exists with this identifier document');
+                let people = await People.getModel().findOne({
+                    raw:true,
+                    where:{
                         IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
-                        IDENTIFIERDOC : body.identifierdoc,
-                        [Sequelize.Op.and]:[
-                            Sequelize.where(Sequelize.col(`${Collaborators.name.toUpperCase()}.IDPEOPLE`),'=',Sequelize.col(`${People.name.toUpperCase()}.ID`)),                            
-                        ]
+                        IDENTIFIERDOC : body.identifierdoc
                     }
-                }]
-            });
-            if (collaborator) throw new Error('collaborator already exists with this identifier document');
-            let people = await People.getModel().findOne({
-                raw:true,
-                where:{
-                    IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
-                    IDENTIFIERDOC : body.identifierdoc
-                }
-            });
-
-            //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
-                //create people if not exists
-                if (!people) people = await People.getModel().create({
-                    IDIDENTIFIERDOCTYPE: IdentifiersDocsTypes.CPF,
-                    IDENTIFIERDOC : body.identifierdoc,
-                    NAME: body.name
-                },{
-                    transaction:t,
-                    req:req
                 });
 
-                //create collaborator
-                collaborator = await Collaborators.getModel().create({
-                    IDPEOPLE: people.ID
-                },{
-                    transaction:t,
-                    req:req
+                //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                    //create people if not exists
+                    if (!people) people = await People.getModel().create({
+                        IDIDENTIFIERDOCTYPE: IdentifiersDocsTypes.CPF,
+                        IDENTIFIERDOC : body.identifierdoc,
+                        NAME: body.name
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+
+                    //create collaborator
+                    collaborator = await Collaborators.getModel().create({
+                        IDPEOPLE: people.ID
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+                    return res.sendResponse(200,true,'collaborator successfull created',collaborator.dataValues);
                 });
-                return res.sendResponse(200,true,'collaborator successfull created',collaborator.dataValues);
-            });
+            }
             
         } catch (e) {
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -87,36 +89,37 @@ class CollaboratorsController {
      */
     static async update(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','PATCH','PUT'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if collaborator exists
-            let collaborator = await Collaborators.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!collaborator) throw new Error('collaborator not found');
+                //check if collaborator exists
+                let collaborator = await Collaborators.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!collaborator) throw new Error('collaborator not found');
 
-            //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
 
-                if (body?.idpeople) {
-                    let people2 = await People.getModel().findOne({
-                        where:{
-                            ID : body?.idpeople
-                        }
-                    });
-                    //console.log(people2,)
-                    if (!people2) throw new Error("people not found");
-                    collaborator.IDPEOPLE = body.idpeople;
-                    await collaborator.save({req:req});
-                    return res.sendResponse(200,true,'collaborator successfull updated',collaborator.dataValues);
-                } else throw new Error('not fields to updated');
-            });
-            
+                    if (body?.idpeople) {
+                        let people2 = await People.getModel().findOne({
+                            where:{
+                                ID : body?.idpeople
+                            }
+                        });
+                        //console.log(people2,)
+                        if (!people2) throw new Error("people not found");
+                        collaborator.IDPEOPLE = body.idpeople;
+                        await collaborator.save({req:req});
+                        return res.sendResponse(200,true,'collaborator successfull updated',collaborator.dataValues);
+                    } else throw new Error('not fields to updated');
+                });
+            }            
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -129,20 +132,22 @@ class CollaboratorsController {
      */
     static async delete(req,res,next) {
         try {
-            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if collaborator exists
-            let collaborator = await Collaborators.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!collaborator) throw new Error('collaborator not found');
-            await collaborator.destroy({req:req});
-            return res.sendResponse(200,true,'collaborator successfull deleted',collaborator.dataValues);
+                //check if collaborator exists
+                let collaborator = await Collaborators.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!collaborator) throw new Error('collaborator not found');
+                await collaborator.destroy({req:req});
+                return res.sendResponse(200,true,'collaborator successfull deleted',collaborator.dataValues);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 

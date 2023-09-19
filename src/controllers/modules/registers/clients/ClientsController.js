@@ -22,59 +22,61 @@ class ClientsController {
      */
     static async create(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.identifierdoc || !body.name) throw new Error("missing data");
+            if (req.method.trim().toUpperCase() != 'POST') res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.identifierdoc || !body.name) throw new Error("missing data");
 
-            //check if client exists
-            let client = await Clients.getModel().findOne({
-                raw:true,
-                include:[{
-                    model: People.getModel(),
-                    required:true,
-                    attributes:[],
-                    on:{
+                //check if client exists
+                let client = await Clients.getModel().findOne({
+                    raw:true,
+                    include:[{
+                        model: People.getModel(),
+                        required:true,
+                        attributes:[],
+                        on:{
+                            IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
+                            IDENTIFIERDOC : body.identifierdoc,
+                            [Sequelize.Op.and]:[
+                                Sequelize.where(Sequelize.col(`${Clients.name.toUpperCase()}.IDPEOPLE`),'=',Sequelize.col(`${People.name.toUpperCase()}.ID`)),                            
+                            ]
+                        }
+                    }]
+                });
+                if (client) throw new Error('client already exists with this identifier document');
+                let people = await People.getModel().findOne({
+                    raw:true,
+                    where:{
                         IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
-                        IDENTIFIERDOC : body.identifierdoc,
-                        [Sequelize.Op.and]:[
-                            Sequelize.where(Sequelize.col(`${Clients.name.toUpperCase()}.IDPEOPLE`),'=',Sequelize.col(`${People.name.toUpperCase()}.ID`)),                            
-                        ]
+                        IDENTIFIERDOC : body.identifierdoc
                     }
-                }]
-            });
-            if (client) throw new Error('client already exists with this identifier document');
-            let people = await People.getModel().findOne({
-                raw:true,
-                where:{
-                    IDIDENTIFIERDOCTYPE : IdentifiersDocsTypes.CPF,
-                    IDENTIFIERDOC : body.identifierdoc
-                }
-            });
-
-            //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
-                //create people if not exists
-                if (!people) people = await People.getModel().create({
-                    IDIDENTIFIERDOCTYPE: IdentifiersDocsTypes.CPF,
-                    IDENTIFIERDOC : body.identifierdoc,
-                    NAME: body.name
-                },{
-                    transaction:t,
-                    req:req
                 });
 
-                //create client
-                client = await Clients.getModel().create({
-                    IDPEOPLE: people.ID
-                },{
-                    transaction:t,
-                    req:req
+                //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                    //create people if not exists
+                    if (!people) people = await People.getModel().create({
+                        IDIDENTIFIERDOCTYPE: IdentifiersDocsTypes.CPF,
+                        IDENTIFIERDOC : body.identifierdoc,
+                        NAME: body.name
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+
+                    //create client
+                    client = await Clients.getModel().create({
+                        IDPEOPLE: people.ID
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+                    return res.sendResponse(200,true,'client successfull created',client.dataValues);
                 });
-                return res.sendResponse(200,true,'client successfull created',client.dataValues);
-            });
+            }
             
         } catch (e) {
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -85,38 +87,39 @@ class ClientsController {
      * @param {*} next 
      * @created 2023-09-03
      */
-    static async update(req,res,next) {
-        if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
+    static async update(req,res,next) {        
         try {
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','PATCH','PUT'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if client exists
-            let client = await Clients.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!client) throw new Error('client not found');
+                //check if client exists
+                let client = await Clients.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!client) throw new Error('client not found');
 
-            //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
 
-                if (body?.idpeople) {
-                    let people = await People.getModel().findOne({
-                        where:{
-                            ID : body?.idpeople
-                        }
-                    });
-                    //console.log(people,)
-                    if (!people) throw new Error("people not found");
-                    client.IDPEOPLE = body.idpeople;
-                    await client.save({req:req});
-                    return res.sendResponse(200,true,'client successfull updated',client.dataValues);
-                } else throw new Error('not fields to updated');
-            });
-            
+                    if (body?.idpeople) {
+                        let people = await People.getModel().findOne({
+                            where:{
+                                ID : body?.idpeople
+                            }
+                        });
+                        //console.log(people,)
+                        if (!people) throw new Error("people not found");
+                        client.IDPEOPLE = body.idpeople;
+                        await client.save({req:req});
+                        return res.sendResponse(200,true,'client successfull updated',client.dataValues);
+                    } else throw new Error('not fields to updated');
+                });
+            }            
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -129,20 +132,22 @@ class ClientsController {
      */
     static async delete(req,res,next) {
         try {
-            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if client exists
-            let client = await Clients.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!client) throw new Error('client not found');
-            await client.destroy({req:req});
-            return res.sendResponse(200,true,'client successfull deleted',client.dataValues);
+                //check if client exists
+                let client = await Clients.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!client) throw new Error('client not found');
+                await client.destroy({req:req});
+                return res.sendResponse(200,true,'client successfull deleted',client.dataValues);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 

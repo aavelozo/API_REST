@@ -22,37 +22,38 @@ class ItemsController {
      */
     static async create(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.gtin || !body.name) throw new Error("missing data");
+            if (req.method.trim().toUpperCase() != 'POST') res.sendResponse(405,false,'method not allowed')
+            else {
+                let body = req.body || {};
+                if (!body.gtin || !body.name) throw new Error("missing data");
 
-            //check if item exists
-            let item = await Items.getModel().findOne({
-                raw:true,
-                where:{
-                    GTIN: body.gtin
-                }
-            });
-            if (item) throw new Error('item already exists with this gtin');
-            
-
-            //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
-                //create item
-                item = await Items.getModel().create({
-                    GTIN: body.gtin,
-                    NAME: body.name,
-                    AMOUNT: body?.amount || 0,
-                    UNVALUE: body?.unvalue || 0
-                },{
-                    transaction:t,
-                    req:req
+                //check if item exists
+                let item = await Items.getModel().findOne({
+                    raw:true,
+                    where:{
+                        GTIN: body.gtin
+                    }
                 });
-                return res.sendResponse(200,true,'item successfull created',item.dataValues);
-            });
-            
+                if (item) throw new Error('item already exists with this gtin');
+                
+
+                //create entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                    //create item
+                    item = await Items.getModel().create({
+                        GTIN: body.gtin,
+                        NAME: body.name,
+                        AMOUNT: body?.amount || 0,
+                        UNVALUE: body?.unvalue || 0
+                    },{
+                        transaction:t,
+                        req:req
+                    });
+                    return res.sendResponse(200,true,'item successfull created',item.dataValues);
+                });
+            }            
         } catch (e) {
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -65,29 +66,30 @@ class ItemsController {
      */
     static async update(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'POST') throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','PATCH','PUT'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if item exists
-            let item = await Items.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!item) throw new Error('item not found');
+                //check if item exists
+                let item = await Items.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!item) throw new Error('item not found');
 
-            //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
-            await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
+                //update entities with *** TRANSACTION ***, if error, sequelize rollback automatically, else, commit automatically
+                await DBConnectionManager.getDefaultDBConnection().transaction(async (t) => {
 
-                for (let key in body) {                
-                    item[key.trim().toUpperCase()] = body[key];
-                } 
-                await item.save({req:req});
-                return res.sendResponse(200,true,'item successfull updated',item.dataValues);
-            });
-            
+                    for (let key in body) {                
+                        item[key.trim().toUpperCase()] = body[key];
+                    } 
+                    await item.save({req:req});
+                    return res.sendResponse(200,true,'item successfull updated',item.dataValues);
+                });
+            }            
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -100,20 +102,22 @@ class ItemsController {
      */
     static async delete(req,res,next) {
         try {
-            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) throw new Error("method not allowed");
-            let body = req.body || {};
-            if (!body.id) throw new Error("missing data");
+            if (['POST','DELETE'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                if (!body.id) throw new Error("missing data");
 
-            //check if item exists
-            let item = await Items.getModel().findOne({
-                where:{ID:body.id}
-            });
-            if (!item) throw new Error('item not found');
-            await item.destroy({req:req});
-            return res.sendResponse(200,true,'item successfull deleted',item.dataValues);
+                //check if item exists
+                let item = await Items.getModel().findOne({
+                    where:{ID:body.id}
+                });
+                if (!item) throw new Error('item not found');
+                await item.destroy({req:req});
+                return res.sendResponse(200,true,'item successfull deleted',item.dataValues);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
@@ -127,20 +131,22 @@ class ItemsController {
      */
     static async get(req,res,next) {
         try {
-            if (req.method.trim().toUpperCase() != 'GET') throw new Error("method not allowed");
-            let body = req.body || {};
-            let where = {};
-            if (body.id) where.ID = body.id;
+            if (['GET','POST'].indexOf(req.method.trim().toUpperCase()) == -1) res.sendResponse(405,false,"method not allowed")
+            else {
+                let body = req.body || {};
+                let where = {};
+                if (body.id) where.ID = body.id;
 
-            //check if item exists
-            let items = await Items.getModel().findAll({
-                raw:true,
-                where:where
-            });            
-            return res.sendResponse(200,true,null,items);
+                //check if item exists
+                let items = await Items.getModel().findAll({
+                    raw:true,
+                    where:where
+                });            
+                return res.sendResponse(200,true,null,items);
+            }
         } catch (e) {
             console.log(e);
-            res.sendResponse(501,false,e.message || e,null,e);
+            res.sendResponse(417,false,e.message || e,null,e);
         }
     }
 
